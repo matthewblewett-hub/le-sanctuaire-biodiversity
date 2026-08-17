@@ -1,5 +1,5 @@
-const CACHE='le-sanctuaire-bio-v4';
-const SHELL=['/index.html','/manifest.webmanifest','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
+const CACHE='le-sanctuaire-bio-v5';
+const SHELL=['/index.html','/manifest.webmanifest','/mont-bleu-mark.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
 
 self.addEventListener('install',event=>{
   self.skipWaiting();
