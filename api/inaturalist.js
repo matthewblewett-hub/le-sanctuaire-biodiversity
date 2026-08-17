@@ -18,6 +18,28 @@ function pointInPolygon(lon, lat) {
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+function compactObservation(observation) {
+  const currentIdentification = (observation.identifications || []).find(item => item.current && item.taxon);
+  const ancestors = currentIdentification?.taxon?.ancestors || [];
+  const family = ancestors.find(item => item.rank === 'family')?.name || '';
+  return {
+    id: observation.id,
+    observed_on: observation.observed_on,
+    quality_grade: observation.quality_grade,
+    species_guess: observation.species_guess,
+    uri: observation.uri,
+    _family: family,
+    taxon: observation.taxon ? {
+      id: observation.taxon.id,
+      name: observation.taxon.name,
+      preferred_common_name: observation.taxon.preferred_common_name,
+      rank: observation.taxon.rank,
+      iconic_taxon_name: observation.taxon.iconic_taxon_name
+    } : null,
+    photos: observation.photos?.[0] ? [{url:observation.photos[0].url}] : []
+  };
+}
+
 export default async function handler(request, response) {
   if (request.method !== 'GET') return response.status(405).json({error:'Method not allowed'});
   try {
@@ -36,7 +58,7 @@ export default async function handler(request, response) {
     const results = all.filter(observation => {
       const coordinates = observation.geojson?.coordinates;
       return coordinates && pointInPolygon(Number(coordinates[0]), Number(coordinates[1]));
-    });
+    }).map(compactObservation);
     response.setHeader('Cache-Control','public, s-maxage=60, stale-while-revalidate=300');
     return response.status(200).json({results, fetchedAt:new Date().toISOString(), boundary:'cluster-2026-08'});
   } catch (error) {
