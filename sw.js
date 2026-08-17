@@ -1,5 +1,5 @@
-const CACHE='le-sanctuaire-bio-v5';
-const SHELL=['/index.html','/manifest.webmanifest','/mont-bleu-mark.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
+const CACHE='le-sanctuaire-bio-v6';
+const SHELL=['/index.html','/app.js','/enrichment-data.js','/fallback-data.js','/manifest.webmanifest','/mont-bleu-mark.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
 
 self.addEventListener('install',event=>{
   self.skipWaiting();
@@ -15,6 +15,8 @@ self.addEventListener('activate',event=>{
 
 self.addEventListener('fetch',event=>{
   const request=event.request;
+  // Observation JSON is cached in localStorage by app.js after a complete sync.
+  if(request.url.startsWith('https://api.inaturalist.org/')) return;
   if(request.mode==='navigate'){
     event.respondWith(fetch(request).then(response=>{
       const copy=response.clone();

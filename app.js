@@ -1,0 +1,179 @@
+/* Live observation data is fetched and cached here. Curated facts live only in enrichment-data.js. */
+const INAT_USER = 'mattbleu';
+const API = 'https://api.inaturalist.org/v1/observations';
+const CACHE_KEY = 'le-sanctuaire-inat-observations-v1';
+const SYNC_KEY = 'le-sanctuaire-inat-synced-v1';
+
+// Temporary conservative cluster. Replace `polygon` with the surveyed farm boundary later.
+const FARM_BOUNDARY = {
+  version: 'cluster-2026-08',
+  polygon: [
+    [19.1335, -33.8950], [19.1380, -33.8950],
+    [19.1380, -33.8870], [19.1335, -33.8870]
+  ]
+};
+
+let DATA = FALLBACK_DATA.slice();
+let group = 'All';
+let filter = 'all';
+const grid = document.getElementById('grid');
+const q = document.getElementById('q');
+const gbar = document.getElementById('groups');
+
+function pointInPolygon(lon, lat, polygon = FARM_BOUNDARY.polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
+    const crosses = ((yi > lat) !== (yj > lat)) &&
+      (lon < (xj - xi) * (lat - yi) / ((yj - yi) || Number.EPSILON) + xi);
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const qualityLabel = q => ({research:'Research Grade', needs_id:'Needs ID', casual:'Casual'}[q] || 'Needs ID');
+const dateLabel = value => value ? new Intl.DateTimeFormat('en-ZA',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value+'T12:00:00')) : '—';
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+function familyOf(o) {
+  const ident = (o.identifications || []).find(x => x.current && x.taxon);
+  const ancestors = ident?.taxon?.ancestors || [];
+  return ancestors.find(x => x.rank === 'family')?.name || '';
+}
+
+function groupFor(scientific, family, iconic) {
+  const genus = scientific.split(' ')[0];
+  if (['Protea','Leucadendron','Leucospermum','Mimetes'].includes(genus) || family === 'Proteaceae') return 'Proteas';
+  if (genus === 'Erica' || family === 'Ericaceae') return 'Ericas & heaths';
+  if (genus === 'Pelargonium') return 'Pelargoniums';
+  if (genus === 'Drosera') return 'Sundews';
+  if (['Agathosma','Adenandra','Diosma'].includes(genus)) return 'Buchus & rutaceae';
+  if (['Iridaceae','Amaryllidaceae','Orchidaceae','Oxalidaceae','Asparagaceae'].includes(family)) return 'Bulbs & geophytes';
+  if (iconic === 'Aves') return 'Birds';
+  if (iconic === 'Mammalia') return 'Mammals';
+  if (iconic === 'Reptilia') return 'Reptiles';
+  if (['Insecta','Arachnida'].includes(iconic)) return 'Invertebrates';
+  return iconic === 'Plantae' ? 'Fynbos shrubs & herbs' : 'Other wildlife';
+}
+
+function photoUrl(o) {
+  const url = o.photos?.[0]?.url || '';
+  return url.replace(/\/square\.(jpe?g|png)$/i, '/medium.$1');
+}
+
+function aggregate(observations) {
+  const buckets = new Map();
+  observations.filter(o => o.taxon && o.observed_on).forEach(o => {
+    const key = String(o.taxon.id || o.taxon.name);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(o);
+  });
+  return [...buckets.values()].map(records => {
+    records.sort((a,b) => a.observed_on.localeCompare(b.observed_on));
+    const firstObs = records[0], latestObs = records[records.length - 1];
+    const taxon = latestObs.taxon;
+    const scientific = taxon.name;
+    const meta = ENRICHMENT[scientific] || {};
+    const family = meta.family || familyOf(latestObs);
+    const monthNums = [...new Set(records.map(o => Number(o.observed_on.slice(5,7))))].sort((a,b)=>a-b);
+    const best = records.find(o => o.quality_grade === 'research' && photoUrl(o)) || [...records].reverse().find(o => photoUrl(o)) || latestObs;
+    const qualities = records.map(o => o.quality_grade);
+    const quality = qualities.includes('research') ? 'Research Grade' : qualities.includes('needs_id') ? 'Needs ID' : 'Casual';
+    return {
+      ...meta,
+      scientific,
+      common: meta.common || taxon.preferred_common_name || latestObs.species_guess || scientific,
+      family,
+      group: meta.group || groupFor(scientific, family, taxon.iconic_taxon_name),
+      months: monthNums.map(n => MONTHS[n-1]), monthNums,
+      count: records.length,
+      frequency: records.length === 1 ? 'Single farm record' : records.length < 4 ? 'Occasional on record' : 'Repeatedly recorded',
+      quality,
+      image: photoUrl(best),
+      inat: best.uri || `https://www.inaturalist.org/observations/${best.id}`,
+      first: dateLabel(firstObs.observed_on), latest: dateLabel(latestObs.observed_on),
+      fact: meta.fact || 'A new live record from iNaturalist. Curated ecological notes can be added without changing the observation history.',
+      fieldNote: meta.fieldNote || 'This taxon was added by live sync and is awaiting a curated field note.',
+      rankNote: meta.rankNote || (taxon.rank && taxon.rank !== 'species' ? `${taxon.rank[0].toUpperCase()+taxon.rank.slice(1)}-level identification` : '')
+    };
+  }).sort((a,b) => a.group.localeCompare(b.group) || a.common.localeCompare(b.common));
+}
+
+async function fetchAllObservations() {
+  let page = 1, all = [], total = Infinity;
+  while (all.length < total && page <= 50) {
+    const url = new URL(API);
+    url.search = new URLSearchParams({user_id:INAT_USER, per_page:'200', page:String(page), order_by:'id', order:'asc'});
+    const response = await fetch(url, {headers:{'Accept':'application/json'}});
+    if (!response.ok) throw new Error(`iNaturalist returned ${response.status}`);
+    const payload = await response.json();
+    total = payload.total_results || 0;
+    all.push(...(payload.results || []));
+    page += 1;
+    if (all.length < total) await delay(1100);
+  }
+  return all.filter(o => {
+    const coordinates = o.geojson?.coordinates;
+    return coordinates && pointInPolygon(Number(coordinates[0]), Number(coordinates[1]));
+  });
+}
+
+function setSyncState(state, detail, offline=false) {
+  document.getElementById('syncState').textContent = state;
+  document.getElementById('lastSynced').textContent = detail;
+  document.getElementById('syncDot').classList.toggle('offline', offline);
+}
+
+async function sync({quiet=false}={}) {
+  const button = document.getElementById('syncBtn');
+  button.disabled = true; button.textContent = 'Syncing…';
+  if (!quiet) setSyncState('Syncing with iNaturalist','Checking mattbleu’s public observations…');
+  try {
+    const farmObservations = await fetchAllObservations();
+    localStorage.setItem(CACHE_KEY, JSON.stringify(farmObservations));
+    const stamp = new Date().toISOString();
+    localStorage.setItem(SYNC_KEY, stamp);
+    DATA = aggregate(farmObservations);
+    rebuildGroups(); render(); updateStats();
+    setSyncState('Live iNaturalist data',`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))} · ${farmObservations.length} farm observations`);
+  } catch (error) {
+    const cached = readCache();
+    if (cached) { DATA = aggregate(cached); rebuildGroups(); render(); updateStats(); }
+    const stamp = localStorage.getItem(SYNC_KEY);
+    setSyncState('Offline — saved data shown', stamp ? `Last successful sync ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}` : 'The original saved farm register is available', true);
+  } finally {
+    button.disabled = false; button.textContent = '↻ Sync iNaturalist';
+  }
+}
+
+function readCache(){try{return JSON.parse(localStorage.getItem(CACHE_KEY))}catch{return null}}
+function updateStats(){
+  document.getElementById('sppCount').textContent=DATA.length;
+  document.getElementById('obsCount').textContent=DATA.reduce((a,b)=>a+b.count,0);
+  document.getElementById('verifiedCount').textContent=DATA.filter(x=>x.status).length;
+}
+function addChip(name,count){const b=document.createElement('button');b.className='chip'+(name==='All'?' active':'');b.dataset.g=name;b.textContent=name+' '+count;gbar.appendChild(b)}
+function rebuildGroups(){
+  const groups=[...new Set(DATA.map(x=>x.group))];
+  if(group!=='All'&&!groups.includes(group))group='All';
+  gbar.innerHTML=''; addChip('All',DATA.length); groups.forEach(g=>addChip(g,DATA.filter(x=>x.group===g).length));
+}
+function okSpecial(x){if(filter==='single')return x.count===1;if(filter==='endemic')return (x.endemism||'').includes('endemic');if(filter==='alien')return !!x.origin;if(filter==='redlist')return !!x.status;if(filter==='research')return x.quality==='Research Grade';if(filter==='aug')return x.monthNums.includes(8);return true}
+function render(){const term=q.value.trim().toLowerCase();const arr=DATA.filter(x=>(group==='All'||x.group===group)&&okSpecial(x)&&(!term||(`${x.common} ${x.scientific} ${x.group} ${x.family}`).toLowerCase().includes(term)));grid.innerHTML='';arr.forEach(x=>{const c=document.createElement('article');c.className='card';c.tabIndex=0;c.innerHTML=`<div class="pic">${x.image?`<img loading="lazy" src="${esc(x.image)}" alt="${esc(x.common)}">`:''}<span class="label">${esc(x.group)}</span></div><div class="content"><div class="common">${esc(x.common)}</div><div class="latin">${esc(x.scientific)}</div><div class="tags">${x.count===1?'<span class="tag gold">Single farm record</span>':''}${x.status?`<span class="tag green">${esc(x.status)}</span>`:''}${x.origin?'<span class="tag red">Alien / introduced</span>':''}<span class="tag">${esc(x.months.join(' · '))}</span></div></div>`;c.onclick=()=>openSheet(x);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(x)}};grid.appendChild(c)});document.getElementById('shown').textContent=arr.length+' shown';document.getElementById('title').textContent=group==='All'?'All species':group}
+function openSheet(x){document.getElementById('sheetImage').innerHTML=x.image?`<img class="sheetPic" src="${esc(x.image)}" alt="${esc(x.common)}">`:'';document.getElementById('mc').textContent=x.common;document.getElementById('ms').textContent=x.scientific;document.getElementById('mfam').textContent=x.family||'—';document.getElementById('mmonths').textContent=x.months.join(', ')||'—';document.getElementById('mrecords').textContent=x.count;document.getElementById('mquality').textContent=x.rankNote||x.quality;document.getElementById('mfirst').textContent=x.first;document.getElementById('mlatest').textContent=x.latest;document.getElementById('mfact').textContent=x.fact;document.getElementById('mfield').textContent=x.fieldNote;let tags=`<span class="tag">${esc(x.group)}</span>`;if(x.status)tags+=`<span class="tag green">SANBI: ${esc(x.status)}</span>`;if(x.endemism)tags+=`<span class="tag green">${esc(x.endemism)}</span>`;if(x.origin)tags+=`<span class="tag red">${esc(x.origin)}</span>`;document.getElementById('mtags').innerHTML=tags;document.getElementById('mrednote').textContent=x.status?`Conservation note: ${x.statusSource}. “LC” means Least Concern. This is separate from how often the species has been recorded on the farm.`:'National Red List status has not yet been verified for this taxon.';const a=document.getElementById('minat');a.href=x.inat||'#';a.style.display=x.inat?'inline-block':'none';document.getElementById('sheetBg').classList.add('open');document.body.style.overflow='hidden'}
+function closeSheet(){document.getElementById('sheetBg').classList.remove('open');document.body.style.overflow=''}
+
+gbar.onclick=e=>{if(!e.target.dataset.g)return;group=e.target.dataset.g;[...gbar.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
+document.getElementById('special').onclick=e=>{if(!e.target.dataset.f)return;filter=e.target.dataset.f;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
+q.oninput=render;
+document.getElementById('close').onclick=closeSheet;
+document.getElementById('sheetBg').onclick=e=>{if(e.target===e.currentTarget)closeSheet()};
+document.getElementById('syncBtn').onclick=()=>sync();
+
+const cached=readCache();
+if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
+rebuildGroups();updateStats();render();
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=6',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+window.addEventListener('load',()=>sync({quiet:true}));
