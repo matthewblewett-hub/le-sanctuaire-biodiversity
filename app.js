@@ -106,7 +106,7 @@ function aggregate(observations) {
       fieldNote: meta.fieldNote || 'This taxon was added by live sync and is awaiting a curated field note.',
       rankNote: meta.rankNote || (taxon.rank && taxon.rank !== 'species' ? `${taxon.rank[0].toUpperCase()+taxon.rank.slice(1)}-level identification` : '')
     };
-  }).sort((a,b) => a.group.localeCompare(b.group) || a.common.localeCompare(b.common));
+  }).sort((a,b) => a.common.localeCompare(b.common, 'en', {sensitivity:'base'}) || a.scientific.localeCompare(b.scientific));
 }
 
 async function fetchAllObservations() {
@@ -144,11 +144,11 @@ async function sync({quiet=false}={}) {
     const stamp = new Date().toISOString();
     localStorage.setItem(SYNC_KEY, stamp);
     DATA = aggregate(farmObservations);
-    rebuildGroups(); render(); updateStats();
+    rebuildControls(); render(); updateStats();
     setSyncState('Live iNaturalist data',`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))} · ${farmObservations.length} farm observations`);
   } catch (error) {
     const cached = readCache();
-    if (cached) { DATA = aggregate(cached); rebuildGroups(); render(); updateStats(); }
+    if (cached) { DATA = aggregate(cached); rebuildControls(); render(); updateStats(); }
     const stamp = localStorage.getItem(SYNC_KEY);
     setSyncState('Offline — saved data shown', stamp ? `Last successful sync ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}` : 'The original saved farm register is available', true);
   } finally {
@@ -168,6 +168,19 @@ function rebuildGroups(){
   if(group!=='All'&&!groups.includes(group))group='All';
   gbar.innerHTML=''; addChip('All',DATA.length); groups.forEach(g=>addChip(g,DATA.filter(x=>x.group===g).length));
 }
+function rebuildFacetCounts(){
+  document.querySelectorAll('#seasons [data-season]').forEach(button=>{
+    const key=button.dataset.season;
+    const count=key==='all'?DATA.length:DATA.filter(x=>SEASONS[key].months.some(m=>x.monthNums.includes(m))).length;
+    button.textContent=`${button.dataset.label} ${count}`;
+  });
+  document.querySelectorAll('#special [data-f]').forEach(button=>{
+    const key=button.dataset.f;
+    const count=key==='all'?DATA.length:DATA.filter(x=>{const previous=filter;filter=key;const matches=okSpecial(x);filter=previous;return matches}).length;
+    button.textContent=`${button.dataset.label} ${count}`;
+  });
+}
+function rebuildControls(){rebuildGroups();rebuildFacetCounts()}
 function okSpecial(x){if(filter==='single')return x.count===1;if(filter==='endemic')return (x.endemism||'').includes('endemic');if(filter==='alien')return !!x.origin;if(filter==='redlist')return !!x.status;if(filter==='research')return x.quality==='Research Grade';if(filter==='aug')return x.monthNums.includes(8);return true}
 function okSeason(x){return season==='all'||SEASONS[season].months.some(m=>x.monthNums.includes(m))}
 function render(){const term=q.value.trim().toLowerCase();const arr=DATA.filter(x=>(group==='All'||x.group===group)&&okSeason(x)&&okSpecial(x)&&(!term||(`${x.common} ${x.scientific} ${x.group} ${x.family}`).toLowerCase().includes(term)));grid.innerHTML='';arr.forEach(x=>{const c=document.createElement('article');c.className='card';c.tabIndex=0;c.innerHTML=`<div class="pic">${x.image?`<img loading="lazy" src="${esc(x.image)}" alt="${esc(x.common)}">`:''}<span class="label">${esc(x.group)}</span></div><div class="content"><div class="common">${esc(x.common)}</div><div class="latin">${esc(x.scientific)}</div><div class="tags">${x.count===1?'<span class="tag gold">Single farm record</span>':''}${x.status?`<span class="tag green">${esc(x.status)}</span>`:''}${x.origin?'<span class="tag red">Alien / introduced</span>':''}<span class="tag">${esc(x.months.join(' · '))}</span></div></div>`;c.onclick=()=>openSheet(x);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(x)}};grid.appendChild(c)});document.getElementById('shown').textContent=arr.length+' shown';const seasonName=season==='all'?'':SEASONS[season].label+' · ';document.getElementById('title').textContent=seasonName+(group==='All'?'All species':group)}
@@ -175,8 +188,8 @@ function openSheet(x){document.getElementById('sheetImage').innerHTML=x.image?`<
 function closeSheet(){document.getElementById('sheetBg').classList.remove('open');document.body.style.overflow=''}
 
 gbar.onclick=e=>{if(!e.target.dataset.g)return;group=e.target.dataset.g;[...gbar.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
-document.getElementById('special').onclick=e=>{if(!e.target.dataset.f)return;filter=e.target.dataset.f;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
-document.getElementById('seasons').onclick=e=>{if(!e.target.dataset.season)return;season=e.target.dataset.season;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
+document.getElementById('special').onclick=e=>{const button=e.target.closest('[data-f]');if(!button)return;filter=button.dataset.f;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===button));render()};
+document.getElementById('seasons').onclick=e=>{const button=e.target.closest('[data-season]');if(!button)return;season=button.dataset.season;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===button));render()};
 q.oninput=render;
 document.getElementById('close').onclick=closeSheet;
 document.getElementById('sheetBg').onclick=e=>{if(e.target===e.currentTarget)closeSheet()};
@@ -184,6 +197,6 @@ document.getElementById('syncBtn').onclick=()=>sync();
 
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
-rebuildGroups();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=7',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+rebuildControls();updateStats();render();
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=8',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));
