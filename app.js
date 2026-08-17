@@ -46,6 +46,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 
 function familyOf(o) {
+  if (o._family) return o._family;
   const ident = (o.identifications || []).find(x => x.current && x.taxon);
   const ancestors = ident?.taxon?.ancestors || [];
   return ancestors.find(x => x.rank === 'family')?.name || '';
@@ -129,11 +130,16 @@ async function sync({quiet=false}={}) {
   if (!quiet) setSyncState('Syncing with iNaturalist','Checking mattbleu’s public observations…');
   try {
     const farmObservations = await fetchAllObservations();
-    localStorage.setItem(CACHE_KEY, JSON.stringify(farmObservations));
     const stamp = new Date().toISOString();
-    localStorage.setItem(SYNC_KEY, stamp);
     DATA = aggregate(farmObservations);
     rebuildControls(); render(); updateStats();
+    try {
+      localStorage.removeItem('le-sanctuaire-inat-observations-v1');
+      localStorage.setItem(CACHE_KEY, JSON.stringify(farmObservations));
+      localStorage.setItem(SYNC_KEY, stamp);
+    } catch (cacheError) {
+      console.warn('Live data loaded but could not be saved for offline use', cacheError);
+    }
     setSyncState('Live iNaturalist data',`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))} · ${farmObservations.length} farm observations`);
   } catch (error) {
     const cached = readCache();
@@ -188,5 +194,5 @@ document.getElementById('syncBtn').onclick=()=>sync();
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
 rebuildControls();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=9',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=10',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));
