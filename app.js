@@ -16,6 +16,7 @@ const FARM_BOUNDARY = {
 let DATA = FALLBACK_DATA.slice();
 let group = 'All';
 let filter = 'all';
+let season = 'all';
 const grid = document.getElementById('grid');
 const q = document.getElementById('q');
 const gbar = document.getElementById('groups');
@@ -32,6 +33,13 @@ function pointInPolygon(lon, lat, polygon = FARM_BOUNDARY.polygon) {
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SEASONS = {
+  summer: {label:'Summer', months:[12,1,2]},
+  autumn: {label:'Autumn', months:[3,4,5]},
+  winter: {label:'Winter', months:[6,7,8]},
+  spring: {label:'Spring', months:[9,10,11]}
+};
+const seasonsFor = monthNums => Object.values(SEASONS).filter(s => s.months.some(m => monthNums.includes(m))).map(s => s.label);
 const qualityLabel = q => ({research:'Research Grade', needs_id:'Needs ID', casual:'Casual'}[q] || 'Needs ID');
 const dateLabel = value => value ? new Intl.DateTimeFormat('en-ZA',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value+'T12:00:00')) : '—';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -161,12 +169,14 @@ function rebuildGroups(){
   gbar.innerHTML=''; addChip('All',DATA.length); groups.forEach(g=>addChip(g,DATA.filter(x=>x.group===g).length));
 }
 function okSpecial(x){if(filter==='single')return x.count===1;if(filter==='endemic')return (x.endemism||'').includes('endemic');if(filter==='alien')return !!x.origin;if(filter==='redlist')return !!x.status;if(filter==='research')return x.quality==='Research Grade';if(filter==='aug')return x.monthNums.includes(8);return true}
-function render(){const term=q.value.trim().toLowerCase();const arr=DATA.filter(x=>(group==='All'||x.group===group)&&okSpecial(x)&&(!term||(`${x.common} ${x.scientific} ${x.group} ${x.family}`).toLowerCase().includes(term)));grid.innerHTML='';arr.forEach(x=>{const c=document.createElement('article');c.className='card';c.tabIndex=0;c.innerHTML=`<div class="pic">${x.image?`<img loading="lazy" src="${esc(x.image)}" alt="${esc(x.common)}">`:''}<span class="label">${esc(x.group)}</span></div><div class="content"><div class="common">${esc(x.common)}</div><div class="latin">${esc(x.scientific)}</div><div class="tags">${x.count===1?'<span class="tag gold">Single farm record</span>':''}${x.status?`<span class="tag green">${esc(x.status)}</span>`:''}${x.origin?'<span class="tag red">Alien / introduced</span>':''}<span class="tag">${esc(x.months.join(' · '))}</span></div></div>`;c.onclick=()=>openSheet(x);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(x)}};grid.appendChild(c)});document.getElementById('shown').textContent=arr.length+' shown';document.getElementById('title').textContent=group==='All'?'All species':group}
-function openSheet(x){document.getElementById('sheetImage').innerHTML=x.image?`<img class="sheetPic" src="${esc(x.image)}" alt="${esc(x.common)}">`:'';document.getElementById('mc').textContent=x.common;document.getElementById('ms').textContent=x.scientific;document.getElementById('mfam').textContent=x.family||'—';document.getElementById('mmonths').textContent=x.months.join(', ')||'—';document.getElementById('mrecords').textContent=x.count;document.getElementById('mquality').textContent=x.rankNote||x.quality;document.getElementById('mfirst').textContent=x.first;document.getElementById('mlatest').textContent=x.latest;document.getElementById('mfact').textContent=x.fact;document.getElementById('mfield').textContent=x.fieldNote;let tags=`<span class="tag">${esc(x.group)}</span>`;if(x.status)tags+=`<span class="tag green">SANBI: ${esc(x.status)}</span>`;if(x.endemism)tags+=`<span class="tag green">${esc(x.endemism)}</span>`;if(x.origin)tags+=`<span class="tag red">${esc(x.origin)}</span>`;document.getElementById('mtags').innerHTML=tags;document.getElementById('mrednote').textContent=x.status?`Conservation note: ${x.statusSource}. “LC” means Least Concern. This is separate from how often the species has been recorded on the farm.`:'National Red List status has not yet been verified for this taxon.';const a=document.getElementById('minat');a.href=x.inat||'#';a.style.display=x.inat?'inline-block':'none';document.getElementById('sheetBg').classList.add('open');document.body.style.overflow='hidden'}
+function okSeason(x){return season==='all'||SEASONS[season].months.some(m=>x.monthNums.includes(m))}
+function render(){const term=q.value.trim().toLowerCase();const arr=DATA.filter(x=>(group==='All'||x.group===group)&&okSeason(x)&&okSpecial(x)&&(!term||(`${x.common} ${x.scientific} ${x.group} ${x.family}`).toLowerCase().includes(term)));grid.innerHTML='';arr.forEach(x=>{const c=document.createElement('article');c.className='card';c.tabIndex=0;c.innerHTML=`<div class="pic">${x.image?`<img loading="lazy" src="${esc(x.image)}" alt="${esc(x.common)}">`:''}<span class="label">${esc(x.group)}</span></div><div class="content"><div class="common">${esc(x.common)}</div><div class="latin">${esc(x.scientific)}</div><div class="tags">${x.count===1?'<span class="tag gold">Single farm record</span>':''}${x.status?`<span class="tag green">${esc(x.status)}</span>`:''}${x.origin?'<span class="tag red">Alien / introduced</span>':''}<span class="tag">${esc(x.months.join(' · '))}</span></div></div>`;c.onclick=()=>openSheet(x);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(x)}};grid.appendChild(c)});document.getElementById('shown').textContent=arr.length+' shown';const seasonName=season==='all'?'':SEASONS[season].label+' · ';document.getElementById('title').textContent=seasonName+(group==='All'?'All species':group)}
+function openSheet(x){document.getElementById('sheetImage').innerHTML=x.image?`<img class="sheetPic" src="${esc(x.image)}" alt="${esc(x.common)}">`:'';document.getElementById('mc').textContent=x.common;document.getElementById('ms').textContent=x.scientific;document.getElementById('mfam').textContent=x.family||'—';document.getElementById('mmonths').textContent=x.months.join(', ')||'—';document.getElementById('mseasons').textContent=seasonsFor(x.monthNums).join(', ')||'—';document.getElementById('mrecords').textContent=x.count;document.getElementById('mquality').textContent=x.rankNote||x.quality;document.getElementById('mfirst').textContent=x.first;document.getElementById('mlatest').textContent=x.latest;document.getElementById('mfact').textContent=x.fact;document.getElementById('mfield').textContent=x.fieldNote;let tags=`<span class="tag">${esc(x.group)}</span>`;if(x.status)tags+=`<span class="tag green">SANBI: ${esc(x.status)}</span>`;if(x.endemism)tags+=`<span class="tag green">${esc(x.endemism)}</span>`;if(x.origin)tags+=`<span class="tag red">${esc(x.origin)}</span>`;document.getElementById('mtags').innerHTML=tags;document.getElementById('mrednote').textContent=x.status?`Conservation note: ${x.statusSource}. “LC” means Least Concern. This is separate from how often the species has been recorded on the farm.`:'National Red List status has not yet been verified for this taxon.';const a=document.getElementById('minat');a.href=x.inat||'#';a.style.display=x.inat?'inline-block':'none';document.getElementById('sheetBg').classList.add('open');document.body.style.overflow='hidden'}
 function closeSheet(){document.getElementById('sheetBg').classList.remove('open');document.body.style.overflow=''}
 
 gbar.onclick=e=>{if(!e.target.dataset.g)return;group=e.target.dataset.g;[...gbar.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
 document.getElementById('special').onclick=e=>{if(!e.target.dataset.f)return;filter=e.target.dataset.f;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
+document.getElementById('seasons').onclick=e=>{if(!e.target.dataset.season)return;season=e.target.dataset.season;[...e.currentTarget.children].forEach(x=>x.classList.toggle('active',x===e.target));render()};
 q.oninput=render;
 document.getElementById('close').onclick=closeSheet;
 document.getElementById('sheetBg').onclick=e=>{if(e.target===e.currentTarget)closeSheet()};
@@ -175,5 +185,5 @@ document.getElementById('syncBtn').onclick=()=>sync();
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
 rebuildGroups();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=6',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=7',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));
