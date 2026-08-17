@@ -1,7 +1,7 @@
 /* Live observation data is fetched and cached here. Curated facts live only in enrichment-data.js. */
 const INAT_USER = 'mattbleu';
-const API = 'https://api.inaturalist.org/v1/observations';
-const CACHE_KEY = 'le-sanctuaire-inat-observations-v1';
+const API = '/api/inaturalist';
+const CACHE_KEY = 'le-sanctuaire-inat-observations-v2';
 const SYNC_KEY = 'le-sanctuaire-inat-synced-v1';
 
 // Temporary conservative cluster. Replace `polygon` with the surveyed farm boundary later.
@@ -110,22 +110,11 @@ function aggregate(observations) {
 }
 
 async function fetchAllObservations() {
-  let page = 1, all = [], total = Infinity;
-  while (all.length < total && page <= 50) {
-    const url = new URL(API);
-    url.search = new URLSearchParams({user_id:INAT_USER, per_page:'200', page:String(page), order_by:'id', order:'asc'});
-    const response = await fetch(url, {headers:{'Accept':'application/json'}});
-    if (!response.ok) throw new Error(`iNaturalist returned ${response.status}`);
-    const payload = await response.json();
-    total = payload.total_results || 0;
-    all.push(...(payload.results || []));
-    page += 1;
-    if (all.length < total) await delay(1100);
-  }
-  return all.filter(o => {
-    const coordinates = o.geojson?.coordinates;
-    return coordinates && pointInPolygon(Number(coordinates[0]), Number(coordinates[1]));
-  });
+  const response = await fetch(`${API}?refresh=${Date.now()}`, {headers:{Accept:'application/json'}, cache:'no-store'});
+  const payload = await response.json().catch(()=>({}));
+  if (!response.ok) throw new Error(payload.error || `Sync service returned ${response.status}`);
+  if (!Array.isArray(payload.results)) throw new Error('Sync service returned no observations');
+  return payload.results;
 }
 
 function setSyncState(state, detail, offline=false) {
@@ -150,7 +139,8 @@ async function sync({quiet=false}={}) {
     const cached = readCache();
     if (cached) { DATA = aggregate(cached); rebuildControls(); render(); updateStats(); }
     const stamp = localStorage.getItem(SYNC_KEY);
-    setSyncState('Offline — saved data shown', stamp ? `Last successful sync ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}` : 'The original saved farm register is available', true);
+    const reason = error?.message ? ` · ${error.message}` : '';
+    setSyncState('Saved data shown — sync unavailable', stamp ? `Last successful sync ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}${reason}` : `The original saved farm register is available${reason}`, true);
   } finally {
     button.disabled = false; button.textContent = '↻ Sync iNaturalist';
   }
@@ -198,5 +188,5 @@ document.getElementById('syncBtn').onclick=()=>sync();
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
 rebuildControls();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=8',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=9',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));
