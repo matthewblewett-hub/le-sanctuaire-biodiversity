@@ -6,4 +6,7 @@ This package preserves the existing 80-taxa guide and adds:
 - iPhone Home Screen icon
 - Updated offline cache
 
-To update the existing Vercel project, upload all files in this folder as a new deployment.
+DEPLOYMENT WORKFLOW
+
+The main branch is connected to the existing Vercel project. Updates committed
+to main are deployed automatically; manual ZIP uploads are no longer required.
