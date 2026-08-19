@@ -1,4 +1,4 @@
-const CACHE='le-sanctuaire-bio-v11';
+const CACHE='le-sanctuaire-bio-v12';
 const SHELL=['/index.html','/app.js','/enrichment-data.js','/ecology-enrichment.js','/fallback-data.js','/firebase-config.js','/farm-notes.js','/manifest.webmanifest','/mont-bleu-mark.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
 
 self.addEventListener('install',event=>{
@@ -17,6 +17,16 @@ self.addEventListener('fetch',event=>{
   const request=event.request;
   // Observation JSON is cached in localStorage by app.js after a complete sync.
   if(request.url.includes('/api/inaturalist')) return;
+  // Firebase configuration may be added after the first deployment. Always try
+  // the network first so an installed PWA does not retain the placeholder file.
+  if(new URL(request.url).pathname==='/firebase-config.js'){
+    event.respondWith(fetch(request).then(response=>{
+      const copy=response.clone();
+      caches.open(CACHE).then(cache=>cache.put(request,copy));
+      return response;
+    }).catch(()=>caches.match(request)));
+    return;
+  }
   if(request.mode==='navigate'){
     event.respondWith(fetch(request).then(response=>{
       const copy=response.clone();
