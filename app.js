@@ -16,7 +16,7 @@ const FARM_BOUNDARY = {
   ]
 };
 
-let DATA = FALLBACK_DATA.map(item => ({...item, ...(ECOLOGY_ENRICHMENT[item.scientific] || {})})).sort(sortSpecies);
+let DATA = FALLBACK_DATA.map(item => ({...item, ...ecologyFor(item.scientific,item.family,item.iconic||'Plantae',item.rank||'species')})).sort(sortSpecies);
 let group = 'All';
 let filter = 'all';
 let season = 'all';
@@ -87,8 +87,9 @@ function aggregate(observations) {
     const firstObs = records[0], latestObs = records[records.length - 1];
     const taxon = latestObs.taxon;
     const scientific = taxon.name;
-    const meta = {...(ENRICHMENT[scientific] || {}), ...(ECOLOGY_ENRICHMENT[scientific] || {})};
-    const family = meta.family || familyOf(latestObs);
+    const baseMeta = ENRICHMENT[scientific] || {};
+    const family = baseMeta.family || familyOf(latestObs);
+    const meta = {...baseMeta, ...ecologyFor(scientific,family,taxon.iconic_taxon_name,taxon.rank)};
     const monthNums = [...new Set(records.map(o => Number(o.observed_on.slice(5,7))))].sort((a,b)=>a-b);
     const best = records.find(o => o.quality_grade === 'research' && photoUrl(o)) || [...records].reverse().find(o => photoUrl(o)) || latestObs;
     const qualities = records.map(o => o.quality_grade);
@@ -184,7 +185,7 @@ function rebuildControls(){rebuildGroups();rebuildFacetCounts()}
 function okSpecial(x){if(filter==='single')return x.count===1;if(filter==='endemic')return (x.endemism||'').includes('endemic');if(filter==='alien')return !!x.origin;if(filter==='redlist')return !!x.status;if(filter==='research')return x.quality==='Research Grade';if(filter==='aug')return x.monthNums.includes(8);return true}
 function okSeason(x){return season==='all'||SEASONS[season].months.some(m=>x.monthNums.includes(m))}
 function render(){const term=q.value.trim().toLowerCase();const arr=DATA.filter(x=>(group==='All'||x.group===group)&&okSeason(x)&&okSpecial(x)&&(!term||(`${x.common} ${x.scientific} ${x.group} ${x.family}`).toLowerCase().includes(term))).sort(sortSpecies);grid.innerHTML='';arr.forEach(x=>{const c=document.createElement('article');c.className='card';c.tabIndex=0;c.innerHTML=`<div class="pic">${x.image?`<img loading="lazy" src="${esc(x.image)}" alt="${esc(x.common)}">`:''}<span class="label">${esc(x.group)}</span></div><div class="content"><div class="common">${esc(x.common)}</div><div class="latin">${esc(x.scientific)}</div><div class="tags"><span class="tag recent">Latest ${esc(x.latest)}</span>${x.count===1?'<span class="tag gold">Single farm record</span>':''}${x.status?`<span class="tag green">${esc(x.status)}</span>`:''}${x.origin?'<span class="tag red">Alien / introduced</span>':''}</div></div>`;c.onclick=()=>openSheet(x);c.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSheet(x)}};grid.appendChild(c)});document.getElementById('shown').textContent=arr.length+' shown · newest first';const seasonName=season==='all'?'':SEASONS[season].label+' · ';document.getElementById('title').textContent=seasonName+(group==='All'?'Latest observations':group)}
-function ecologyRows(x){const fields=[['Pollinator / pollination',x.pollinator||x.pollinationStrategy],['Regeneration / propagation',x.regeneration||x.propagationStrategy],['Seed dispersal',x.dispersal||x.seedDispersal],['Fire response',x.fireResponse],['Animal interactions',x.animalInteractions],['Ecosystem / soil role',x.ecosystemRole||x.soilRelationships],['Phenology / flowering',x.phenology||x.flowering],['Habitat',x.habitat],['Etymology',x.etymology]];return fields.filter(([,v])=>v).map(([k,v])=>`<div class="ecoRow"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}
+function ecologyRows(x){const fields=[['Knowledge level',x.ecologyScope],['Pollinator / pollination',x.pollinator||x.pollinationStrategy],['Regeneration / propagation',x.regeneration||x.propagationStrategy],['Seed dispersal',x.dispersal||x.seedDispersal],['Fire response',x.fireResponse],['Animal interactions',x.animalInteractions],['Ecosystem / soil role',x.ecosystemRole||x.soilRelationships],['Phenology / flowering',x.phenology||x.flowering],['Habitat',x.habitat],['Etymology',x.etymology],['What to watch for',x.observationPrompt]];return fields.filter(([,v])=>v).map(([k,v])=>`<div class="ecoRow${k==='What to watch for'?' watchRow':''}"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}
 function openSheet(x){document.getElementById('sheetImage').innerHTML=x.image?`<img class="sheetPic" src="${esc(x.image)}" alt="${esc(x.common)}">`:'';document.getElementById('mc').textContent=x.common;document.getElementById('ms').textContent=x.scientific;document.getElementById('mfam').textContent=x.family||'—';document.getElementById('mmonths').textContent=x.months.join(', ')||'—';document.getElementById('mseasons').textContent=seasonsFor(x.monthNums).join(', ')||'—';document.getElementById('mrecords').textContent=x.count;document.getElementById('mquality').textContent=x.rankNote||x.quality;document.getElementById('mfirst').textContent=x.first;document.getElementById('mlatest').textContent=x.latest;document.getElementById('mfact').textContent=x.interestingFact||x.fact;document.getElementById('mfield').textContent=x.fieldNote;document.getElementById('mecology').innerHTML=ecologyRows(x)||'<div class="ecoEmpty">Detailed ecological relationships have not yet been curated for this taxon.</div>';let tags=`<span class="tag">${esc(x.group)}</span>`;if(x.status)tags+=`<span class="tag green">SANBI: ${esc(x.status)}</span>`;if(x.endemism)tags+=`<span class="tag green">${esc(x.endemism)}</span>`;if(x.origin)tags+=`<span class="tag red">${esc(x.origin)}</span>`;document.getElementById('mtags').innerHTML=tags;document.getElementById('mrednote').textContent=x.status?`Conservation note: ${x.statusSource}. “LC” means Least Concern. This is separate from how often the species has been recorded on the farm.`:'National Red List status has not yet been verified for this taxon.';const a=document.getElementById('minat');a.href=x.inat||'#';a.style.display=x.inat?'inline-block':'none';document.getElementById('sheetBg').classList.add('open');document.body.style.overflow='hidden';window.FarmNotes?.openSpecies({taxonKey:String(x.scientific).toLowerCase().replace(/[^a-z0-9]+/g,'-'),scientific:x.scientific,common:x.common})}
 function closeSheet(){document.getElementById('sheetBg').classList.remove('open');document.body.style.overflow=''}
 
@@ -199,5 +200,5 @@ document.getElementById('syncBtn').onclick=()=>sync();
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
 rebuildControls();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=12',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=14',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));
