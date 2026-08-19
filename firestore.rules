@@ -5,7 +5,7 @@ service cloud.firestore {
     match /farmNotes/{noteId} {
       function isOwner() {
         return request.auth != null
-          && request.auth.uid == "PASTE_YOUR_FIREBASE_USER_UID";
+          && request.auth.uid == "T87geYzmPFen1FUBhAaXmBpIKcF3";
       }
       allow read, delete: if isOwner();
       allow create: if isOwner() && request.resource.data.ownerUid == request.auth.uid;
