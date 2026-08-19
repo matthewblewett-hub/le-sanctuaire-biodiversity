@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Replace the placeholder with the UID shown beside your Firebase Auth user.
+    match /farmNotes/{noteId} {
+      function isOwner() {
+        return request.auth != null
+          && request.auth.uid == "PASTE_YOUR_FIREBASE_USER_UID";
+      }
+      allow read, delete: if isOwner();
+      allow create: if isOwner() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isOwner()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}

@@ -1,19 +1,7 @@
-LE SANCTUAIRE BIODIVERSITY — LIVE INATURALIST VERSION
+LE SANCTUAIRE BIODIVERSITY
 
-This package preserves the existing 80-taxa guide and adds:
-- Le Sanctuaire mountain logo
-- Mont Bleu colour palette
-- iPhone Home Screen icon
-- Updated offline cache
-- Live public iNaturalist sync for mattbleu
-- Curated enrichment stored separately from observation data
-- Replaceable conservative farm-boundary polygon
-- Automatic and manual sync with last-synced status
+See README.md for complete setup and deployment instructions.
 
-DEPLOYMENT WORKFLOW
-
-The main branch is connected to the existing Vercel project. Updates committed
-to main are deployed automatically; manual ZIP uploads are no longer required.
-
-The temporary farm polygon is defined as FARM_BOUNDARY in app.js. It can be
-replaced with an exact surveyed boundary without changing the sync logic.
+This version preserves live iNaturalist sync and PWA behavior, sorts species by
+latest observation, adds a separate ecological enrichment layer, and provides
+optional owner-only Firestore Farm Notes with graceful fallback.
