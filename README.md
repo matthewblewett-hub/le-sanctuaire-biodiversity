@@ -63,9 +63,17 @@ If ownership later expands, use a custom-claims or membership-document design ra
   phenology, flowering,
   habitat,
   origin, endemism, status, statusSource,
+  rangeRarity, rangeRestricted, rarityNote, raritySource,
   etymology, interestingFact
 }
 ```
+
+`status` is reserved for the SANBI conservation codes `LC`, `NT`, `VU`,
+`EN`, `CR` and `EW`. Range rarity is deliberately separate: set
+`rangeRarity: "rare"` (or `rangeRestricted: true`) only when an authoritative
+source describes the taxon as localized or range-restricted, then include a
+plain-language `rarityNote` and `raritySource`. A single farm observation is
+not evidence of global or regional rarity.
 
 Missing fields are hidden. Add claims only when supported by a reliable source. The older `enrichment-data.js` continues to provide the existing names, grouping, conservation fields, and general facts. The app merges the two curated files at display time, separately from observation data.
 
