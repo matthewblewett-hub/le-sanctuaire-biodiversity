@@ -77,6 +77,8 @@ not evidence of global or regional rarity.
 
 Missing fields are hidden. Add claims only when supported by a reliable source. The older `enrichment-data.js` continues to provide the existing names, grouping, conservation fields, and general facts. The app merges the two curated files at display time, separately from observation data.
 
+`etymology-enrichment.js` turns the reviewed genus and epithet meanings into a separate scientific-name story on every detail card. It includes the common-name connection, a field memory clue, confidence wording and a source link.
+
 `plantzafrica-enrichment.js` adds a third curated reference layer for taxa with an exact PlantZAfrica account. Its text is concise and paraphrased, and each record retains the SANBI source URL. These profiles add description, distribution and habitat, ecology, uses and conservation context where the source provides them. They do not replace the current SANBI Red List code in `enrichment-data.js`. Traditional-use notes are historical context, not medical advice.
 
 ## GitHub and Vercel deployment
