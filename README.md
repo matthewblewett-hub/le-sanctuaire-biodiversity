@@ -48,38 +48,20 @@ The supplied rules allow all note reads and writes only to the one authenticated
 
 If ownership later expands, use a custom-claims or membership-document design rather than adding more UIDs directly throughout the app.
 
-## Ecological enrichment model
+## Master enrichment model
 
-`ecology-enrichment.js` is keyed by scientific name and may contain any of:
+`le-sanctuaire-taxa-enrichment-master.xlsx` is the editable source of truth for curated taxon knowledge. It contains one `Taxa Enrichment` table with one row per live taxon. The table keeps raw research notes and source URLs separate from the concise `Card ...` and `App ...` fields that are allowed onto the live cards.
 
-```js
-{
-  pollinator, pollinationStrategy,
-  regeneration, propagationStrategy,
-  seedDispersal, dispersal,
-  fireResponse,
-  animalInteractions,
-  ecosystemRole, soilRelationships,
-  phenology, flowering,
-  habitat,
-  origin, endemism, status, statusSource,
-  rangeRarity, rangeRestricted, rarityNote, raritySource,
-  etymology, interestingFact
-}
-```
+The normal update cycle is:
 
-`status` is reserved for the SANBI conservation codes `LC`, `NT`, `VU`,
-`EN`, `CR` and `EW`. Range rarity is deliberately separate: set
-`rangeRarity: "rare"` (or `rangeRestricted: true`) only when an authoritative
-source describes the taxon as localized or range-restricted, then include a
-plain-language `rarityNote` and `raritySource`. A single farm observation is
-not evidence of global or regional rarity.
+1. Add detailed evidence and source URLs to the relevant row.
+2. Set `Refresh status` to `Needs summary refresh`.
+3. Ask Codex to refresh the Fybos taxa cards from the master workbook.
+4. Codex preserves the detailed evidence, synthesizes the card fields, resets the row to `Live summary`, regenerates `taxa-enrichment-master.js`, validates the site, and publishes it.
 
-Missing fields are hidden. Add claims only when supported by a reliable source. The older `enrichment-data.js` continues to provide the existing names, grouping, conservation fields, and general facts. The app merges the two curated files at display time, separately from observation data.
+`taxa-enrichment-master.js` is the generated web snapshot and is the only curated enrichment file loaded by the app. It includes identity, card summaries, conservation display fields, ecological relationships, PlantZAfrica profiles, scientific-name stories and field memory clues. The older enrichment JavaScript files remain only as lineage for the first consolidation and are not active inputs at runtime.
 
-`etymology-enrichment.js` turns the reviewed genus and epithet meanings into a separate scientific-name story on every detail card. It includes the common-name connection, a field memory clue, confidence wording and a source link.
-
-`plantzafrica-enrichment.js` adds a third curated reference layer for taxa with an exact PlantZAfrica account. Its text is concise and paraphrased, and each record retains the SANBI source URL. These profiles add description, distribution and habitat, ecology, uses and conservation context where the source provides them. They do not replace the current SANBI Red List code in `enrichment-data.js`. Traditional-use notes are historical context, not medical advice.
+`status` is reserved for SANBI conservation display values. Range rarity remains a separate measure and is published only when supported by authoritative evidence. A single farm observation is not evidence of global or regional rarity. Traditional-use notes are historical context, not medical advice.
 
 ## GitHub and Vercel deployment
 
@@ -89,14 +71,15 @@ Missing fields are hidden. Add claims only when supported by a reliable source. 
 4. The already-connected Vercel project should deploy automatically. No build command is required.
 5. In Vercel, confirm the deployment contains `/api/inaturalist`, then test **Sync iNaturalist**.
 6. On the live site, open a card and test Farm Notes sign-in, add, edit, and delete.
-7. If an installed iPhone Home Screen copy looks stale, close/reopen it once; service-worker cache version `v11` replaces the previous shell.
+7. If an installed iPhone Home Screen copy looks stale, close/reopen it once; service-worker cache version `v18` replaces the previous shell.
 
 The Firebase config can alternatively be generated during deployment, but this no-build repository intentionally uses the clear `firebase-config.js` approach. Do not place secrets in that file.
 
 ## Data separation
 
 - `api/inaturalist.js`, browser cache, and `fallback-data.js`: observation layer.
-- `enrichment-data.js` and `ecology-enrichment.js`: curated reference layer.
+- `le-sanctuaire-taxa-enrichment-master.xlsx`: editable curated knowledge source.
+- `taxa-enrichment-master.js`: generated live card-summary snapshot.
 - Firestore `farmNotes`: private farm-specific knowledge.
 
 An iNaturalist refresh can update dates, photos, counts, and identification quality without overwriting either curated enrichment or Farm Notes.
