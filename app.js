@@ -205,5 +205,5 @@ document.getElementById('syncBtn').onclick=()=>sync();
 const cached=readCache();
 if(cached){DATA=aggregate(cached);const stamp=localStorage.getItem(SYNC_KEY);setSyncState('Saved iNaturalist data',stamp?`Last synced ${new Intl.DateTimeFormat('en-ZA',{dateStyle:'medium',timeStyle:'short'}).format(new Date(stamp))}`:'Saved farm observations loaded')}
 rebuildControls();updateStats();render();
-if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=18',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js?v=19',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 window.addEventListener('load',()=>sync({quiet:true}));

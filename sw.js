@@ -1,4 +1,4 @@
-const CACHE='le-sanctuaire-bio-v18';
+const CACHE='le-sanctuaire-bio-v19';
 const SHELL=['/index.html','/app.js','/taxa-enrichment-master.js','/fallback-data.js','/firebase-config.js','/farm-notes.js','/manifest.webmanifest','/mont-bleu-mark.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png'];
 
 self.addEventListener('install',event=>{
